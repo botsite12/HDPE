@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Sàn Giao Dịch Chứng Khoán</title>
+<style>
+:root{
+    --bg:#0b1220;
+    --panel:#111827;
+    --border:#1f2937;
+    --green:#22c55e;
+    --red:#ef4444;
+    --blue:#38bdf8;
+}
+body{
+    margin:0;
+    font-family:Segoe UI, Arial;
+    background:var(--bg);
+    color:white;
+}
+header{
+    padding:15px 20px;
+    background:#020617;
+    border-bottom:1px solid var(--border);
+    font-size:20px;
+}
+.container{
+    display:grid;
+    grid-template-columns: 2fr 1fr;
+    gap:15px;
+    padding:15px;
+}
+.panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:15px;
+}
+.money{
+    font-size:18px;
+    margin-bottom:10px;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+th,td{
+    padding:10px;
+    border-bottom:1px solid var(--border);
+    text-align:center;
+}
+th{
+    color:#94a3b8;
+    font-weight:600;
+}
+.up{color:var(--green);}
+.down{color:var(--red);}
+button{
+    background:#020617;
+    color:white;
+    border:1px solid var(--border);
+    padding:6px 10px;
+    border-radius:5px;
+    cursor:pointer;
+}
+button:hover{background:#020617cc}
+canvas{
+    width:100%;
+    height:260px;
+}
+.asset{
+    display:flex;
+    justify-content:space-between;
+    margin:6px 0;
+    color:#cbd5f5;
+}
+body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    padding:6px;
+    background:linear-gradient(
+        90deg,
+        #22c55e,
+        #38bdf8,
+        #a855f7,
+        #ef4444,
+        #22c55e
+    );
+    background-size:400% 400%;
+    animation:borderGlow 8s linear infinite;
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask-composite:exclude;
+    pointer-events:none;
+    z-index:9999;
+}
+
+@keyframes borderGlow{
+    0%{background-position:0% 50%}
+    100%{background-position:400% 50%}
+}
+
+</style>
+</head>
+<audio id="bgMusic" loop preload="auto">
+    <source src="music.mp3" type="audio/mpeg">
+</audio>
+
+<button id="musicBtn" onclick="toggleMusic()" style="
+position:fixed;
+bottom:20px;
+right:20px;
+z-index:999;
+padding:10px 14px;
+border-radius:50%;
+border:1px solid #1f2937;
+background:#020617;
+color:white;
+cursor:pointer;">
+🎵
+</button>
+
+<body>
+
+<header>📊 SÀN CHỨNG KHOÁN (MÔ PHỎNG)</header>
+
+<div class="container">
+
+<!-- BẢNG GIÁ -->
+<div class="panel">
+    <div class="money">💰 Số dư: <b id="money">10000</b></div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Mã</th>
+                <th>Giá</th>
+                <th>+/-</th>
+                <th>Sở hữu</th>
+                <th>Giao dịch</th>
+            </tr>
+        </thead>
+        <tbody id="market"></tbody>
+    </table>
+</div>
+
+<!-- BIỂU ĐỒ + TÀI SẢN -->
+<div class="panel">
+    <h3>📈 Biểu đồ giá</h3>
+    <canvas id="chart" width="400" height="260"></canvas>
+
+    <h3>💼 Danh mục</h3>
+    <div id="portfolio"></div>
+</div>
+
+</div>
+
+<script>
+    // ===== NHẠC NỀN =====
+   let music;
+let playing = false;
+
+window.addEventListener("click", () => {
+    if (!music) {
+        music = document.getElementById("bgMusic");
+    }
+}, { once: true });
+
+function toggleMusic(){
+    if(!music){
+        music = document.getElementById("bgMusic");
+    }
+
+    if(!playing){
+        music.play().then(()=>{
+            playing = true;
+        }).catch(err=>{
+            alert("❌ Trình duyệt chặn âm thanh. Hãy bấm lại!");
+            console.log(err);
+        });
+    }else{
+        music.pause();
+        playing = false;
+    }
+}
+
+
+function toggleMusic(){
+    if(!playing){
+        music.play();
+        playing = true;
+    }else{
+        music.pause();
+        playing = false;
+    }
+}
+
+let money = 10000;
+
+let stocks = [
+    {code:"triết huyền",price:150,owned:0,change:0},
+    {code:"hiếu thảo",price:120,owned:0,change:0},
+    {code:"nghĩa linh",price:100,owned:0,change:0},
+    {code:"tài huyền",price:70,owned:0,change:0}
+];
+// ===== GHI LOG GIAO DỊCH =====
+function logTrade(action, stock){
+    let logs = JSON.parse(localStorage.getItem("logs") || "[]");
+    logs.push({
+        user: user ? user.name : "Khách",
+        action: action,
+        code: stock.code,
+        price: stock.price,
+        time: new Date().toLocaleString()
+    });
+    localStorage.setItem("logs", JSON.stringify(logs));
+}
+
+
+function render(){
+    document.getElementById("money").innerText = money.toFixed(0);
+    let rows="", assets="";
+    stocks.forEach((s,i)=>{
+        let cls=s.change>=0?"up":"down";
+        let sign=s.change>=0?"+":"";
+        rows+=`
+        <tr>
+            <td>${s.code}</td>
+            <td>${s.price}</td>
+            <td class="${cls}">${sign}${s.change}</td>
+            <td>${s.owned}</td>
+            <td>
+                <button onclick="buy(${i})">Mua</button>
+                <button onclick="sell(${i})">Bán</button>
+            </td>
+        </tr>`;
+        if(s.owned>0){
+            assets+=`<div class="asset">
+                <span>${s.code} (${s.owned})</span>
+                <span>${s.owned*s.price}</span>
+            </div>`;
+        }
+    });
+    document.getElementById("market").innerHTML=rows;
+    document.getElementById("portfolio").innerHTML=assets||"<i>Chưa có cổ phiếu</i>";
+    drawChart();
+}
+
+function buy(i){
+    if(money >= stocks[i].price){
+        money -= stocks[i].price;
+        stocks[i].owned++;
+
+        logTrade("MUA", stocks[i]); // ✅ THÊM DÒNG NÀY
+
+        render();
+    } else alert("❌ Không đủ tiền!");
+}
+
+function sell(i){
+    if(stocks[i].owned > 0){
+        money += stocks[i].price;
+        stocks[i].owned--;
+
+        logTrade("BÁN", stocks[i]); // ✅ THÊM DÒNG NÀY
+
+        render();
+    } else alert("❌ Không có cổ phiếu!");
+}
+
+
+// BIỂU ĐỒ CỘT
+function drawChart(){
+    const c=document.getElementById("chart");
+    const ctx=c.getContext("2d");
+    ctx.clearRect(0,0,c.width,c.height);
+    let max=Math.max(...stocks.map(s=>s.price));
+    let w=60,g=30;
+    stocks.forEach((s,i)=>{
+        let h=s.price/max*180;
+        let x=i*(w+g)+40;
+        let y=c.height-h-30;
+        ctx.fillStyle="#38bdf8";
+        ctx.fillRect(x,y,w,h);
+        ctx.fillStyle="white";
+        ctx.textAlign="center";
+        ctx.fillText(s.code,x+w/2,c.height-10);
+        ctx.fillText(s.price,x+w/2,y-5);
+    });
+}
+
+// GIÁ CHẠY NHƯ SÀN
+setInterval(()=>{
+    stocks.forEach(s=>{
+        let ch=Math.floor(Math.random()*12-6);
+        s.change=ch;
+        s.price+=ch;
+        if(s.price<1)s.price=1;
+    });
+    render();
+},2000);
+function logTrade(action, stock){
+    let logs = JSON.parse(localStorage.getItem("logs") || "[]");
+    logs.push({
+        user: user.name,
+        action: action,
+        code: stock.code,
+        price: stock.price,
+        time: new Date().toLocaleString()
+    });
+    localStorage.setItem("logs", JSON.stringify(logs));
+}
+
+render();
+</script>
+
+</body>
+</html>
