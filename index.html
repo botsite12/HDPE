@@ -79,17 +79,16 @@ body::before{
     content:"";
     position:fixed;
     inset:0;
-    padding:6px;
+    padding:8px;
     background:linear-gradient(
         90deg,
-        #22c55e,
-        #38bdf8,
-        #a855f7,
-        #ef4444,
-        #22c55e
+        var(--c1),
+        var(--c2),
+        var(--c3),
+        var(--c1)
     );
     background-size:400% 400%;
-    animation:borderGlow 8s linear infinite;
+    animation:borderGlow 6s linear infinite;
     -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -97,12 +96,16 @@ body::before{
     mask-composite:exclude;
     pointer-events:none;
     z-index:9999;
+    filter: brightness(var(--glow));
 }
 
-@keyframes borderGlow{
-    0%{background-position:0% 50%}
-    100%{background-position:400% 50%}
+:root{
+    --c1:#22c55e;
+    --c2:#38bdf8;
+    --c3:#a855f7;
+    --glow:1;
 }
+
 /* ================= MOBILE ================= */
 @media (max-width: 768px) {
 
@@ -235,15 +238,18 @@ function toggleMusic(){
     if(!playing){
         music.play().then(()=>{
             playing = true;
-        }).catch(err=>{
-            alert("❌ Trình duyệt chặn âm thanh. Hãy bấm lại!");
-            console.log(err);
+
+            // ✅ CHỈ THÊM 2 DÒNG NÀY
+            if(!audioCtx) initVisualizer();
+            else audioCtx.resume();
+
         });
     }else{
         music.pause();
         playing = false;
     }
 }
+
 
 
 function toggleMusic(){
@@ -254,6 +260,36 @@ function toggleMusic(){
         music.pause();
         playing = false;
     }
+}
+let audioCtx, analyser, dataArray, source;
+
+function initVisualizer(){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+
+    source = audioCtx.createMediaElementSource(music);
+    source.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    animateBorder();
+}
+
+function animateBorder(){
+    analyser.getByteFrequencyData(dataArray);
+
+    let avg = dataArray.reduce((a,b)=>a+b,0) / dataArray.length;
+    let glow = Math.min(2, 1 + avg / 80);
+
+    let hue = Math.floor(avg * 3);
+
+    document.documentElement.style.setProperty("--glow", glow);
+    document.documentElement.style.setProperty("--c1", `hsl(${hue},100%,60%)`);
+    document.documentElement.style.setProperty("--c2", `hsl(${hue+60},100%,60%)`);
+    document.documentElement.style.setProperty("--c3", `hsl(${hue+120},100%,60%)`);
+
+    requestAnimationFrame(animateBorder);
 }
 
 let money = 10000;
